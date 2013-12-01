@@ -16,10 +16,6 @@ int variogram(const char * shapefile, int fieldIndex, int lag, int lagCount)
     
 }
 
-
-/*
- * 
- */
 int main(int argc, char** argv) {
     
     OGRRegisterAll();
