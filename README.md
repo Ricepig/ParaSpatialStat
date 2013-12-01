@@ -15,3 +15,4 @@ Doing:
 Semi-variogram fitting:Sphere, Gaussian, Exp
 
 Ricepig
+2013-12-02
