@@ -7,9 +7,9 @@
 
 #include <cstdlib>
 #include "ogrsf_frmts.h"
+#include "ElementContainer.h"
 
 using namespace std;
-
 
 int variogram(const char * shapefile, int fieldIndex, int lag, int lagCount)
 {
@@ -19,9 +19,9 @@ int variogram(const char * shapefile, int fieldIndex, int lag, int lagCount)
 int main(int argc, char** argv) {
     
     OGRRegisterAll();
-    OGRDataSource       *poDS;
+    OGRDataSource *poDS;
 
-    poDS = OGRSFDriverRegistrar::Open( "point.shp", FALSE );
+    poDS = OGRSFDriverRegistrar::Open("point.shp", FALSE);
     if( poDS == NULL )
     {
         printf( "Open failed.\n" );
