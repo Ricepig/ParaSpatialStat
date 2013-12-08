@@ -6,13 +6,65 @@
  */
 
 #include <cstdlib>
+#include <string>
 #include "ogrsf_frmts.h"
 #include "ElementContainer.h"
 
 using namespace std;
 
-int variogram(const char * shapefile, int fieldIndex, int lag, int lagCount)
+void fatal(const char* msg)
 {
+    printf("Fatal error: %s\n", msg);
+    exit(0);
+}
+
+struct ElementContainer loadData(const char * shapefile, int fieldIndex, int rankSize, int myRank)
+{
+    OGRDataSource *poDS = OGRSFDriverRegistrar::Open(shapefile, FALSE);
+    if(poDS == NULL)
+        fatal("Can't open the data source.");
+    string path(shapefile);
+    int pos = path.find_last_of("\\");
+    OGRLayer  *poLayer = poDS->GetLayerByName( path.substr(pos+1, path.length()-pos-5) );
+    if(poLayer == NULL)
+        fatal("Can't open the data source.");
+    
+    struct ElementContainer *ec = (struct ElementContainer*)malloc(sizeof(struct ElementContainer));
+    ECInit(ec);
+    
+    OGRFeature *poFeature;
+    int count = 0;
+    poLayer->ResetReading();
+    while( (poFeature = poLayer->GetNextFeature()) != NULL )
+    {
+        if(count % rankSize == myRank)
+        {
+            OGRGeometry *poGeometry = poFeature->GetGeometryRef();
+            if(poGeometry != NULL){
+                
+                if(wkbFlatten(poGeometry->getGeometryType()) =! wkbPoint)
+                    fatal("The layer type is restricted to point.");
+            
+                OGRPoint *poPoint = (OGRPoint*)poGeometry;
+                
+                ECAdd(ec, poPoint->getX(), poPoint->getY(), (float)poFeature->GetFieldAsDouble(fieldIndex));
+            }
+            
+        }
+        OGRFeature::DestroyFeature( poFeature );
+        count++;
+    }
+
+    OGRDataSource::DestroyDataSource( poDS );
+    return ec;
+}
+
+int variogram(const char * shapefile, int fieldIndex, int lag, int lagCount, int rankSize, int myRank)
+{
+    struct ElementContainer * ec = loadData(shapefile, fieldIndex, rankSize, myRank);
+    
+    
+    
     
 }
 
