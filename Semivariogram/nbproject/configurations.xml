@@ -3,8 +3,11 @@
   <logicalFolder name="root" displayName="root" projectFiles="true" kind="ROOT">
     <logicalFolder name="HeaderFiles" displayName="头文件" projectFiles="true">
       <itemPath>ElementContainer.h</itemPath>
+      <itemPath>LagContainer.h</itemPath>
+      <itemPath>ParallelInversion.h</itemPath>
     </logicalFolder>
     <logicalFolder name="SourceFiles" displayName="源文件" projectFiles="true">
+      <itemPath>ParallelInversion.cpp</itemPath>
       <itemPath>main.cpp</itemPath>
     </logicalFolder>
     <logicalFolder name="ResourceFiles" displayName="资源文件" projectFiles="true">
@@ -57,6 +60,12 @@
       </compileType>
       <item path="ElementContainer.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="LagContainer.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ParallelInversion.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="ParallelInversion.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="main.cpp" ex="false" tool="1" flavor2="0">
       </item>
     </conf>
@@ -81,6 +90,12 @@
         </asmTool>
       </compileType>
       <item path="ElementContainer.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="LagContainer.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ParallelInversion.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="ParallelInversion.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="main.cpp" ex="false" tool="1" flavor2="0">
       </item>

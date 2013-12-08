@@ -283,8 +283,8 @@ void printUsage()
 }
                 
 int main(int argc, char **argv) {
-    //testmultiply(argc, argv);
-    //return 1;
+    testmultiply(argc, argv);
+    return 1;
     GDALAllRegister();
     MPI_Init(&argc,&argv);
     if(strcmp("test", argv[0])){

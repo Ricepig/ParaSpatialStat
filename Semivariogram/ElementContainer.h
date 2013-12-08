@@ -33,6 +33,13 @@ void ECInit(struct ElementContainer* ec)
     ec->Length = 0;
 }
 
+void ECInitWithSize(struct ElementContainer* ec, size_t size)
+{
+    ec->Head = (struct Element *)malloc(sizeof(Element) * size);
+    ec->Size = size;
+    ec->Length = 0;
+}
+
 static void ECRealloc(struct ElementContainer* ec)
 {
     struct Element* dest = (struct Element*)malloc(sizeof(struct Element) * ec->Size * 2);

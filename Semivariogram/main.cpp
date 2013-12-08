@@ -9,6 +9,11 @@
 #include <string>
 #include "ogrsf_frmts.h"
 #include "ElementContainer.h"
+#include "LagContainer.h"
+#include "math.h"
+#include "mpi.h"
+
+#define EPSILON 0.0000001
 
 using namespace std;
 
@@ -18,7 +23,7 @@ void fatal(const char* msg)
     exit(0);
 }
 
-struct ElementContainer loadData(const char * shapefile, int fieldIndex, int rankSize, int myRank)
+struct ElementContainer loadData(const char * shapefile, int fieldIndex, int rankSize, int myRank, int *pcount)
 {
     OGRDataSource *poDS = OGRSFDriverRegistrar::Open(shapefile, FALSE);
     if(poDS == NULL)
@@ -56,13 +61,123 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
     }
 
     OGRDataSource::DestroyDataSource( poDS );
+    *pcount = count;
     return ec;
 }
 
-int variogram(const char * shapefile, int fieldIndex, int lag, int lagCount, int rankSize, int myRank)
+void classify(struct ElementContainer* ec, int lag, int lagCount)
+{
+    
+}
+
+
+inline void inner_classify(struct Element* poE1, struct Element* poE2, struct LagContainer *lc, double sqLag, double range)
+{
+    double dist = (poE1->X - poE2->X) * (poE1->X - poE2->X) + (poE1->Y - poE2->Y) * (poE1->Y - poE2->Y);
+    if(dist <= range)
+    {
+        int index = (dist + sqLag - EPSILON)/sqLag;
+        (lc->counts[index])++;
+        (lc->sums[index])+= abs(poE1->Value - poE2->Value);
+    }
+}
+
+void classify(struct ElementContainer* ec1, struct ElementContainer* ec2, struct LagContainer *lc, double sqLag, int lagCount)
+{
+    double range = sqLag * lagCount;
+    struct Element* poE1 = ec1->Head;
+    
+    for(size_t i=0;i<ec1->Length;i++, poE1++){
+        struct Element* poE2 = ec2->Head;
+        for(size_t j=0;j<ec1->Length;j++, poE2++)
+            inner_classify(poE1, poE2, lc, sqLag, range);
+    }
+        
+}
+
+void classify_self(struct ElementContainer* ec, struct LagContainer *lc, double sqLag, int lagCount)
+{
+    double range = sqLag * lagCount;
+    struct Element* poE1 = ec->Head;
+    for(size_t i=0;i<ec->Length;i++, poE1++){
+        struct Element* poE2 = ec->Head+i+1;
+        for(size_t j=i+1;j<ec->Length;j++, poE2++)
+            inner_classify(poE1, poE2, lc, sqLag, range);
+    }
+}
+
+int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, int rankSize, int myRank)
+{
+    int count;
+    struct ElementContainer * ec = loadData(shapefile, fieldIndex, rankSize, myRank, &count);
+    
+    struct LagContainer * lc = (struct LagContainer)malloc(sizeof(struct Element));
+    LCInit(lc, lagCount);
+    
+    double sqLag = lag*lag;
+    
+    int blockSize = (count + rankSize - 1)/rankSize;
+    struct ElementContainer * ec2 = (struct ElementContainer *)malloc(sizeof(struct ElementContainer));
+    ECInitWithSize(ec2, blockSize);
+    
+    for(int i=0;i<rankSize;i++)
+    {
+        int currentSize = blockSize*(rankSize-1) + i <= count?blockSize:blockSize-1;
+        MPI_Bcast(ec2->Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
+        ec2->Length = currentSize;
+        if(i==myRank){
+            classify_self(ec, lc, sqLag, lagCount);
+        }else{
+            if(i<myRank)
+                classify(ec, ec2, lc, sqLag, lagCount);
+        }
+    }
+    
+    struct LagContainer * lc2 = (struct LagContainer)malloc(sizeof(struct Element));
+    LCInit(lc2, lagCount);
+    MPI_Allreduce(lc->counts, lc2->counts, lc->size, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(lc->sums, lc2->sums, lc->size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    
+    LCCalcAverage(lc);
+    
+    
+    
+}
+
+
+int variogram2(const char * shapefile, int fieldIndex, int lag, int lagCount, int rankSize, int myRank)
 {
     struct ElementContainer * ec = loadData(shapefile, fieldIndex, rankSize, myRank);
-    
+    int dest, src;
+    for(size_t stride = 1;stride<rankSize;stride++)
+    {
+        // phase 1: send data from the first half stride to the second half
+        if(myRank / stride % 2 == 0){
+            //sender
+            dest = myRank + stride;
+            if(dest<rankSize){
+                //send msg to dest;
+            }
+        }else{
+            //receiver
+            src = myRank - stride;
+        }
+        
+        // phase 2: send data from the second half stride to the first half of the next stride
+        if(myRank / stride %2 == 0 ){
+            //receiver
+            src = myRank - stride;
+            if(src >= 0){
+                //receive
+            }
+        } else {
+            dest = myRank + stride;
+            if(dest<rankSize){
+            
+            }
+        }
+            
+    }
     
     
     
