@@ -52,7 +52,7 @@ FFLAGS=
 ASFLAGS=
 
 # Link Libraries and Options
-LDLIBSOPTIONS=-L../../ann_1.1.2/lib -L/usr/local/lib -L/usr/lib/openmpi/lib -lgdal -lANN -lmpi_cxx
+LDLIBSOPTIONS=-Lann_1.1.2/lib -L/usr/local/lib -L/usr/lib/openmpi/lib -lgdal -lANN -lmpi_cxx
 
 # Build Targets
 .build-conf: ${BUILD_SUBPROJECTS}
@@ -60,12 +60,12 @@ LDLIBSOPTIONS=-L../../ann_1.1.2/lib -L/usr/local/lib -L/usr/lib/openmpi/lib -lgd
 
 ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/kriging: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
-	mpic++ -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/kriging ${OBJECTFILES} ${LDLIBSOPTIONS} 
+	mpic++ -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/kriging ${OBJECTFILES} ${LDLIBSOPTIONS}
 
 ${OBJECTDIR}/main.o: main.cpp 
 	${MKDIR} -p ${OBJECTDIR}
-	${RM} $@.d
-	$(COMPILE.cc) -g -I../../ann_1.1.2/include -I/usr/lib/openmpi/include -MMD -MP -MF $@.d -o ${OBJECTDIR}/main.o main.cpp
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -Iann_1.1.2/include -I/usr/lib/openmpi/include -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.cpp
 
 # Subprojects
 .build-subprojects:
