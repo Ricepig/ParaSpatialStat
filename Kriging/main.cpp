@@ -73,7 +73,8 @@ int read_vector(const char* filename, int fieldIdx, ANNpointArray* ptArray, doub
 	double x,y;
 	while( (poFeature = poLayer->GetNextFeature()) != NULL )
     {
-		(*ptValues)[idx] = poFeature->GetFieldAsDouble(fieldIdx);
+        double value = poFeature->GetFieldAsDouble(fieldIdx);
+		(*ptValues)[idx] = value;
 		
         OGRGeometry *poGeometry;
 
@@ -260,7 +261,7 @@ double kriging_spheroid(ANNpointArray ptArray, double* ptValues, ANNkd_tree* tre
 	
 	if(guass_eliminator(matrix, k+1)==1){
 		
-		dump_matrix(matrix, k+2, k+1);
+		//dump_matrix(matrix, k+2, k+1);
 		return 0;
 	}
 		
@@ -420,6 +421,7 @@ int index_of_1(int i)
 	return 0;
 }
 
+
 void print_usage()
 {
 	printf("Kriging Interpolation Program Usage:\n");
@@ -430,11 +432,11 @@ void print_usage()
  */
 int main(int argc, char** argv) {
 	
-	if(argc != 9)
+	/*if(argc != 9)
 	{
 		print_usage();
 		return 0;
-	}
+	}*/
 	
 	GDALAllRegister();
 	OGRRegisterAll();
@@ -442,17 +444,26 @@ int main(int argc, char** argv) {
 	int tid, numprocs;
 	MPI_Comm_rank(MPI_COMM_WORLD, &tid);
 	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
-	double pixelSize = std::atof(argv[4]); // 10000;
+	/*double pixelSize = std::atof(argv[4]); // 10000;
 	int k = std::atoi(argv[5]);// 32;
 	int fldIndex = std::atoi(argv[3]); //4;
 	double c = std::atof(argv[6]); // 2;
 	double cc = std::atof(argv[7]); //20.0;
 	double a = std::atof(argv[8]); //100000.0;
 	string srcFile(argv[1]);
-	string dstFile(argv[2]);
+	string dstFile(argv[2]);*/
 	//const char * srcFile = "/home/ricepig/data/ca_pm10_pts.shp";
 	//const char * dstFile = "/home/ricepig/data/output.tiff";
 	
+    double pixelSize = 0.00055555556;// 0.00027777778; // std::atof(argv[4]); // 10000;
+	int k = 12; //std::atoi(argv[5]);// 32;
+	int fldIndex = 0; // std::atoi(argv[3]); //4;
+	double c = 0.75241; // std::atof(argv[6]); // 2;
+	double cc = 0.3106; // std::atof(argv[7]); //20.0;
+	double a = 4.98925; // std::atof(argv[8]); //100000.0;
+	string srcFile("/home/ricepig/data/hlj2.shp");
+	string dstFile("/home/ricepig/data/output7.tiff");
+    
 	if(tid==0){
         cout<<"[DEBUG] [OPTIONS] input file:"<<srcFile<<endl;
         cout<<"[DEBUG] [OPTIONS] output file:"<<dstFile<<endl;
@@ -516,34 +527,73 @@ int main(int argc, char** argv) {
 		
 	output_info output;
 	output.pixelSize = pixelSize;
-	
-	/*
-	for(int i=0;i<row;i++)
-	{
-		output.top = extent.maxY - i * yStride * pixelSize;
-		output.nYSize = (i+1)*yStride>nYSize?nYSize-i*yStride:yStride;
-		for(int j=0;j<col;j++)
-		{
-			output.left = extent.minX + j * xStride * pixelSize;
-			output.nXSize = (j+1)*xStride>nXSize?nXSize-j*xStride:xStride;
-			output.pValues = new float[output.nXSize*output.nYSize];
-			
-			kriging(pArray, values, tree, k, c, cc, a, output);
-			
-			pBand->RasterIO(GF_Write, j*xStride, i*yStride, output.nXSize, output.nYSize, (void*)output.pValues, output.nXSize, output.nYSize, GDT_Float32, 0, 0);
-			
-			delete[] output.pValues;
-			
-		}
-	}*/
-	
-	int i = tid / col;
-	output.top = extent.maxY - i * yStride * pixelSize;
-	output.nYSize = (i+1)*yStride>nYSize?nYSize-i*yStride:yStride;
-		
-	int j= tid % col;
+    
+    int j= tid % col;
 	output.left = extent.minX + j * xStride * pixelSize;
 	output.nXSize = (j+1)*xStride>nXSize?nXSize-j*xStride:xStride;
+    
+    int i = tid / col;
+	
+    double localTop = extent.maxY - i * yStride * pixelSize;
+	int localYSize = (i+1)*yStride>nYSize?nYSize-i*yStride:yStride;
+	
+    output.nYSize = 1;
+    
+    output.pValues = new float[xStride];
+    
+    float* buffer = new float[xStride];
+    
+    double t01,t02;
+    double atime = 0;
+    
+    for(int n=0;n<yStride;n++)
+    {
+        output.top = localTop-n*pixelSize;
+        
+        if(n<localYSize)
+        {
+            kriging(pArray, values, tree, k, c, cc, a, output);
+        }
+        
+        t01 = MPI_Wtime();
+        if(tid==0)
+        {
+            //printf("node 0: (%d,%d),size(%d, %d)\n", j*xStride, i*yStride+n, output.nXSize, 1);
+            pBand->RasterIO(GF_Write, j*xStride, i*yStride+n, output.nXSize, 1, (void*)output.pValues, output.nXSize, 1, GDT_Float32, 0, 0);
+ 
+            int nXSize2;
+            
+            MPI_Status status;
+            for(int k=1;k<numprocs;k++)
+            {
+                int li = k / col;
+                int lj = k % col;
+                
+                if(li*yStride+n<nYSize)
+                {
+                    nXSize2 = (lj+1)*xStride>nXSize?nXSize-lj*xStride:xStride;
+                    
+                    MPI_Recv(buffer, nXSize2, MPI_FLOAT, k, 99, MPI_COMM_WORLD, &status);
+                    //printf("node %d: (%d,%d),size(%d, %d)\n", k, lj*xStride, li*yStride+n, nXSize2, 1);
+                    pBand->RasterIO(GF_Write, lj*xStride, li*yStride+n, nXSize2, 1, (void*)buffer, nXSize2, 1, GDT_Float32, 0, 0);
+                }
+                
+            }
+        }
+        else
+        {
+            MPI_Send((void*)output.pValues, output.nXSize*output.nYSize, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);   
+        }
+        t02 = MPI_Wtime();
+        atime += (t02-t01);
+    }
+    
+	delete[] output.pValues;
+    delete[] buffer;
+    
+    /*
+	output.top = extent.maxY - i * yStride * pixelSize;
+	output.nYSize = (i+1)*yStride>nYSize?nYSize-i*yStride:yStride;
 	output.pValues = new float[output.nXSize*output.nYSize];
 			
 	kriging(pArray, values, tree, k, c, cc, a, output);
@@ -578,14 +628,15 @@ int main(int argc, char** argv) {
 		MPI_Send((void*)output.pValues, output.nXSize*output.nYSize, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
 		delete[] output.pValues;
 	}
-	
+	*/
+    
 	if(tid==0)
 		close_raster(pDS);
 	double t4 = MPI_Wtime();
 	
 	if(tid==0){
-        cout<<"[DEBUG] [TIMESPAN] [IO] "<< (t4-t3)+(t2-t1) << endl;
-        cout<<"[DEBUG] [TIMESPAN] [COMPUTING] "<< t3-t2 << endl;
+        cout<<"[DEBUG] [TIMESPAN] [IO] "<< t2-t1+atime  << endl;
+        cout<<"[DEBUG] [TIMESPAN] [COMPUTING] "<< t4-t2-atime << endl;
         cout<<"[DEBUG] [TIMESPAN] [TOTAL]"<< t4-t1 << endl;  
     }
 	
@@ -595,7 +646,6 @@ int main(int argc, char** argv) {
 	
 	annClose();
 	MPI_Finalize();
-	
 }
 
 
