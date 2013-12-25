@@ -279,15 +279,18 @@ int fisher_training(const char * classFile, const char * dataFile, int* bandIndi
 
 void printUsage()
 {
-    printf("Usage:\nfisher [classification file] [data file] [index of band1] [index of band2] ...\rn");
+    printf("Usage:\nfisher [classification raster] [raster 1] [raster 2] ... [raster n]\n");	
 }
                 
 int main(int argc, char **argv) {
-    testmultiply(argc, argv);
-    return 1;
     GDALAllRegister();
     MPI_Init(&argc,&argv);
-    if(strcmp("test", argv[0])){
+    if(argc<4){
+		printUsage();
+	} else {
+		
+	}		
+	if(strcmp("test", argv[0])){
         int indices[7];
         indices[0] = 1;
         indices[1] = 2;

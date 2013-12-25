@@ -221,8 +221,6 @@ void fill_matrix(int k, double c, double cc, double** matrix)
 
 
 /*
- *
- *
  * params:
  * k: k-th nearest neighbors
  * c: nugget
@@ -303,7 +301,7 @@ void kriging(ANNpointArray ptArray, double* ptValues, ANNkd_tree* tree, int k, d
 			index++;
 		}
 	}
-	
+
 	for(i=0;i<k+1;i++)
 		delete[] matrix[i];
 	delete[] matrix;
@@ -647,6 +645,5 @@ int main(int argc, char** argv) {
 	annClose();
 	MPI_Finalize();
 }
-
 
 
