@@ -14,7 +14,6 @@
 
 using namespace std;
 
-
 typedef struct output_info {
 	double left;  
 	double top;
@@ -22,7 +21,6 @@ typedef struct output_info {
 	int nXSize;		// pixel count on x-axis
 	int nYSize;		// pixel count on y-axis
 	float * pValues;	// values to fill into the raster
-	
 } output_info;
 
 typedef struct extent_info {
@@ -31,7 +29,6 @@ typedef struct extent_info {
 	double minY;
 	double maxY;
 } extent_info;
-
 
 int read_vector(const char* filename, int fieldIdx, ANNpointArray* ptArray, double** ptValues, int& count, extent_info& extent, char** pSpatialRefWkt)
 {
