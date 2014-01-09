@@ -439,25 +439,23 @@ int main(int argc, char** argv) {
 	int tid, numprocs;
 	MPI_Comm_rank(MPI_COMM_WORLD, &tid);
 	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
-	/*double pixelSize = std::atof(argv[4]); // 10000;
-	int k = std::atoi(argv[5]);// 32;
-	int fldIndex = std::atoi(argv[3]); //4;
-	double c = std::atof(argv[6]); // 2;
-	double cc = std::atof(argv[7]); //20.0;
-	double a = std::atof(argv[8]); //100000.0;
+	double pixelSize = std::atof(argv[4]); 
+	int k = std::atoi(argv[5]);
+	int fldIndex = std::atoi(argv[3]);
+	double c = std::atof(argv[6]);
+	double cc = std::atof(argv[7]);
+	double a = std::atof(argv[8]);
 	string srcFile(argv[1]);
-	string dstFile(argv[2]);*/
-	//const char * srcFile = "/home/ricepig/data/ca_pm10_pts.shp";
-	//const char * dstFile = "/home/ricepig/data/output.tiff";
+	string dstFile(argv[2]);
 	
-    double pixelSize = 0.00055555556;// 0.00027777778; // std::atof(argv[4]); // 10000;
+    /*double pixelSize = 0.00055555556;// 0.00027777778; // std::atof(argv[4]); // 10000;
 	int k = 12; //std::atoi(argv[5]);// 32;
 	int fldIndex = 0; // std::atoi(argv[3]); //4;
 	double c = 0.75241; // std::atof(argv[6]); // 2;
 	double cc = 0.3106; // std::atof(argv[7]); //20.0;
 	double a = 4.98925; // std::atof(argv[8]); //100000.0;
 	string srcFile("/home/ricepig/data/hlj2.shp");
-	string dstFile("/home/ricepig/data/output7.tiff");
+	string dstFile("/home/ricepig/data/output7.tiff");*/
     
 	if(tid==0){
         cout<<"[DEBUG] [OPTIONS] input file:"<<srcFile<<endl;
@@ -480,7 +478,6 @@ int main(int argc, char** argv) {
 	
 	// Stage 1: Read data;
 	double t1 = MPI_Wtime();
-	
 	
 	if(read_vector(srcFile.c_str(), fldIndex, &pArray, &values, count, extent, &spatialrefWkt)==1)
 	{

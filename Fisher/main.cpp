@@ -254,20 +254,20 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount)
     }
     delete[] datasets;
     
-    return 1;
+    return 0;
 }
         
 int main(int argc, char **argv) {
     if(check_args(argc, argv)==false){
         print_usage();
-        return 1;
+        return 0;
     }
     
     GDALAllRegister();
     MPI_Init(&argc,&argv);
     fisher_training(argv[1], argv+2, argc-2);
     MPI_Finalize();
-    return 1;
+    return 0;
 }
 
 

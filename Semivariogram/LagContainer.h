@@ -42,8 +42,8 @@ void LCDestory(struct LagContainer *lc)
 
 void LCCalcAverage(struct LagContainer *lc)
 {
-    double s = lc->sums;
-    double c = lc->counts;
+    double* s = lc->sums;
+    int* c = lc->counts;
     for(size_t i=0;i<lc->size;i++,s++,c++)
         *s /= *c;
 }

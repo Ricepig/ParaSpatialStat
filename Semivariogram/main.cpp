@@ -10,6 +10,7 @@
 #include "ogrsf_frmts.h"
 #include "ElementContainer.h"
 #include "LagContainer.h"
+#include "GuassianElimination.h"
 #include "math.h"
 #include "mpi.h"
 
@@ -23,6 +24,12 @@ void fatal(const char* msg)
     exit(0);
 }
 
+void print_usage()
+{
+	printf("Semivariogram Fitting Program Usage:\n");
+	printf("Semivariogram [input file] [field index] [lag] [lag count]\n");
+}
+
 struct ElementContainer loadData(const char * shapefile, int fieldIndex, int rankSize, int myRank, int *pcount)
 {
     OGRDataSource *poDS = OGRSFDriverRegistrar::Open(shapefile, FALSE);
@@ -30,12 +37,12 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
         fatal("Can't open the data source.");
     string path(shapefile);
     int pos = path.find_last_of("\\");
-    OGRLayer  *poLayer = poDS->GetLayerByName( path.substr(pos+1, path.length()-pos-5) );
+    OGRLayer  *poLayer = poDS->GetLayerByName( path.substr(pos+1, path.length()-pos-5).c_str() );
     if(poLayer == NULL)
         fatal("Can't open the data source.");
     
-    struct ElementContainer *ec = (struct ElementContainer*)malloc(sizeof(struct ElementContainer));
-    ECInit(ec);
+    struct ElementContainer ec;
+    ECInit(&ec);
     
     OGRFeature *poFeature;
     int count = 0;
@@ -47,12 +54,12 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
             OGRGeometry *poGeometry = poFeature->GetGeometryRef();
             if(poGeometry != NULL){
                 
-                if(wkbFlatten(poGeometry->getGeometryType()) =! wkbPoint)
+                if(wkbFlatten(poGeometry->getGeometryType()) != wkbPoint)
                     fatal("The layer type is restricted to point.");
             
                 OGRPoint *poPoint = (OGRPoint*)poGeometry;
                 
-                ECAdd(ec, poPoint->getX(), poPoint->getY(), (float)poFeature->GetFieldAsDouble(fieldIndex));
+                ECAdd(&ec, poPoint->getX(), poPoint->getY(), (float)poFeature->GetFieldAsDouble(fieldIndex));
             }
             
         }
@@ -65,181 +72,189 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
     return ec;
 }
 
-void classify(struct ElementContainer* ec, int lag, int lagCount)
+inline void inner_classify(struct Element* poE1, struct Element* poE2, struct LagContainer *lc, double lag, double range)
 {
-    
-}
-
-
-inline void inner_classify(struct Element* poE1, struct Element* poE2, struct LagContainer *lc, double sqLag, double range)
-{
-    double dist = (poE1->X - poE2->X) * (poE1->X - poE2->X) + (poE1->Y - poE2->Y) * (poE1->Y - poE2->Y);
+    double dist = sqrt((poE1->X - poE2->X) * (poE1->X - poE2->X) + (poE1->Y - poE2->Y) * (poE1->Y - poE2->Y));
     if(dist <= range)
     {
-        int index = (dist + sqLag - EPSILON)/sqLag;
+        int index = (dist + lag - EPSILON)/lag;
         (lc->counts[index])++;
-        (lc->sums[index])+= abs(poE1->Value - poE2->Value);
+        (lc->sums[index]) += fabs(poE1->Value - poE2->Value);
     }
 }
 
-void classify(struct ElementContainer* ec1, struct ElementContainer* ec2, struct LagContainer *lc, double sqLag, int lagCount)
+void classify_cross(struct ElementContainer* ec1, struct ElementContainer* ec2, struct LagContainer *lc, double lag, int lagCount)
 {
-    double range = sqLag * lagCount;
+    double range = lag * lagCount;
     struct Element* poE1 = ec1->Head;
     
     for(size_t i=0;i<ec1->Length;i++, poE1++){
         struct Element* poE2 = ec2->Head;
         for(size_t j=0;j<ec1->Length;j++, poE2++)
-            inner_classify(poE1, poE2, lc, sqLag, range);
+            inner_classify(poE1, poE2, lc, lag, range);
     }
         
 }
 
-void classify_self(struct ElementContainer* ec, struct LagContainer *lc, double sqLag, int lagCount)
+void classify_self(struct ElementContainer* ec, struct LagContainer *lc, double lag, int lagCount)
 {
-    double range = sqLag * lagCount;
+    double range = lag * lagCount;
     struct Element* poE1 = ec->Head;
     for(size_t i=0;i<ec->Length;i++, poE1++){
         struct Element* poE2 = ec->Head+i+1;
         for(size_t j=i+1;j<ec->Length;j++, poE2++)
-            inner_classify(poE1, poE2, lc, sqLag, range);
+            inner_classify(poE1, poE2, lc, lag, range);
     }
+}
+
+double ** new_matrix(int row, int col)
+{
+    double ** matrix = new double*[row];
+    for(int i=0;i<row;i++){
+        matrix[i] = new double[col];
+    }
+}
+
+void delete_matrix(double ** matrix, int row)
+{
+    for(int i=0;i<row;i++)
+        delete[] matrix[i];
+    delete[] matrix;
+}
+
+#ifdef DEBUG
+
+void print_matrix(double** matrix, int sizex, int sizey)
+{
+    printf("\nMatrix: %d x %d\n", sizey,sizex);
+    for(int i=0;i<sizey;i++) 
+    {
+        for(int j=0;j<sizex;j++) 
+            printf("v:%.4f\t",matrix[i][j]);
+        printf("\n"); 
+    }
+}
+#endif
+
+void OLS_spheroid(struct LagContainer * lc, double lag, int rankSize, int myRank, double * c0, double *c, double *a)
+{
+    if(myRank == 0){
+        double ** matrix = new_matrix(3, 4);
+        for(int i=0;i<lc->size;i++)
+        {
+            double x1 = lag * i + lag / 2;
+            double d2 = x1 * x1;
+            double x2 = - d2 * x1;
+            matrix[0][0]++;
+            matrix[0][1] += x1;
+            matrix[0][2] += x2;
+            matrix[0][3] += lc->sums[i];
+            matrix[1][1] += d2;
+            matrix[1][2] += x1 * x2;
+            matrix[1][3] += lc->sums[i] * x1;
+            matrix[2][2] += x2 * x2;
+            matrix[2][3] += lc->sums[i] * x2;
+        }
+        matrix[1][0] = matrix[0][1];
+        matrix[2][0] = matrix[0][2];
+        matrix[2][1] = matrix[1][2];
+        
+#ifdef DEBUG
+        print_matrix(matrix, 3, 4);
+#endif        
+        guass_eliminator(matrix, 3);
+        *c0 = matrix[0][3];
+        *a = sqrt(matrix[1][3]/matrix[2][3]/3);
+        *c = matrix[1][3] * (*a) * 2 / 3;
+        delete_matrix(matrix, 3);
+    }
+    
 }
 
 int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, int rankSize, int myRank)
 {
+    if(myRank == 0){
+        cout<<"[DEBUG] [OPTIONS] input file:"<<shapefile<<endl;
+        cout<<"[DEBUG] [OPTIONS] field index:"<<fieldIndex<<endl;
+		cout<<"[DEBUG] [OPTIONS] lag:"<<lag<<endl;
+		cout<<"[DEBUG] [OPTIONS] lag count:"<<lagCount<<endl;
+    }
     int count;
-    struct ElementContainer * ec = loadData(shapefile, fieldIndex, rankSize, myRank, &count);
     
-    struct LagContainer * lc = (struct LagContainer)malloc(sizeof(struct Element));
-    LCInit(lc, lagCount);
+    double t1 = MPI_Wtime();
+    struct ElementContainer ec = loadData(shapefile, fieldIndex, rankSize, myRank, &count);
+    double t2 = MPI_Wtime();
+    struct LagContainer lc;
+    LCInit(&lc, lagCount);
     
     double sqLag = lag*lag;
     
     int blockSize = (count + rankSize - 1)/rankSize;
-    struct ElementContainer * ec2 = (struct ElementContainer *)malloc(sizeof(struct ElementContainer));
-    ECInitWithSize(ec2, blockSize);
+    struct ElementContainer ec2;
+    ECInitWithSize(&ec2, blockSize);
     
     for(int i=0;i<rankSize;i++)
     {
         int currentSize = blockSize*(rankSize-1) + i <= count?blockSize:blockSize-1;
-        MPI_Bcast(ec2->Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
-        ec2->Length = currentSize;
+        MPI_Bcast(ec2.Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
+        ec2.Length = currentSize;
         if(i==myRank){
-            classify_self(ec, lc, sqLag, lagCount);
+            classify_self(&ec, &lc, sqLag, lagCount);
         }else{
             if(i<myRank)
-                classify(ec, ec2, lc, sqLag, lagCount);
+                classify_cross(&ec, &ec2, &lc, sqLag, lagCount);
         }
     }
     
-    struct LagContainer * lc2 = (struct LagContainer)malloc(sizeof(struct Element));
-    LCInit(lc2, lagCount);
-    MPI_Allreduce(lc->counts, lc2->counts, lc->size, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(lc->sums, lc2->sums, lc->size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    struct LagContainer lc2;
+    LCInit(&lc2, lagCount);
+    MPI_Allreduce(lc.counts, lc2.counts, lc.size, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(lc.sums, lc2.sums, lc.size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
-    LCCalcAverage(lc);
+    LCCalcAverage(&lc);
+    double c, c0, a;
+    OLS_spheroid(&lc, lag, rankSize, myRank, &c0, &c, &a);
+    double t3 = MPI_Wtime();
+    LCDestory(&lc2);
+    ECDestory(&ec2);
+    LCDestory(&lc);
+    ECDestory(&ec);
     
-    
-    
-}
-
-
-int variogram2(const char * shapefile, int fieldIndex, int lag, int lagCount, int rankSize, int myRank)
-{
-    struct ElementContainer * ec = loadData(shapefile, fieldIndex, rankSize, myRank);
-    int dest, src;
-    for(size_t stride = 1;stride<rankSize;stride++)
-    {
-        // phase 1: send data from the first half stride to the second half
-        if(myRank / stride % 2 == 0){
-            //sender
-            dest = myRank + stride;
-            if(dest<rankSize){
-                //send msg to dest;
-            }
-        }else{
-            //receiver
-            src = myRank - stride;
-        }
+    if(myRank==0){
+        cout<<"[DEBUG] [TIMESPAN] [IO] "<< t2-t1  << endl;
+        cout<<"[DEBUG] [TIMESPAN] [COMPUTING] "<< t3-t2 << endl;
+        cout<<"[DEBUG] [TIMESPAN] [TOTAL]"<< t3-t1 << endl; 
         
-        // phase 2: send data from the second half stride to the first half of the next stride
-        if(myRank / stride %2 == 0 ){
-            //receiver
-            src = myRank - stride;
-            if(src >= 0){
-                //receive
-            }
-        } else {
-            dest = myRank + stride;
-            if(dest<rankSize){
-            
-            }
-        }
-            
-    }
-    
-    
-    
+        cout << "[OUTPUT] C0: " << c0 << endl;
+        cout << "[OUTPUT] C: " << c << endl;
+        cout << "[OUTPUT] a: " << a << endl;
+    }    
 }
 
 int main(int argc, char** argv) {
     
+    if(argc != 5){
+        print_usage();
+        return 0;
+    }
+    
     OGRRegisterAll();
-    OGRDataSource *poDS;
-
-    poDS = OGRSFDriverRegistrar::Open("point.shp", FALSE);
-    if( poDS == NULL )
-    {
-        printf( "Open failed.\n" );
-        exit( 1 );
-    }
-
-    OGRLayer  *poLayer;
-    poLayer = poDS->GetLayerByName( "point" );
-
-    OGRFeature *poFeature;
-
-    poLayer->ResetReading();
-    while( (poFeature = poLayer->GetNextFeature()) != NULL )
-    {
-        OGRFeatureDefn *poFDefn = poLayer->GetLayerDefn();
-        int iField;
-
-        for( iField = 0; iField < poFDefn->GetFieldCount(); iField++ )
-        {
-            OGRFieldDefn *poFieldDefn = poFDefn->GetFieldDefn( iField );
-
-            if( poFieldDefn->GetType() == OFTInteger )
-                printf( "%d,", poFeature->GetFieldAsInteger( iField ) );
-            else if( poFieldDefn->GetType() == OFTReal )
-                printf( "%.3f,", poFeature->GetFieldAsDouble(iField) );
-            else if( poFieldDefn->GetType() == OFTString )
-                printf( "%s,", poFeature->GetFieldAsString(iField) );
-            else
-                printf( "%s,", poFeature->GetFieldAsString(iField) );
-        }
-
-        OGRGeometry *poGeometry;
-
-        poGeometry = poFeature->GetGeometryRef();
-        if( poGeometry != NULL 
-            && wkbFlatten(poGeometry->getGeometryType()) == wkbPoint )
-        {
-            OGRPoint *poPoint = (OGRPoint *) poGeometry;
-
-            printf( "%.3f,%3.f\n", poPoint->getX(), poPoint->getY() );
-        }
-        else
-        {
-            printf( "no point geometry\n" );
-        }       
-        OGRFeature::DestroyFeature( poFeature );
-    }
-
-    OGRDataSource::DestroyDataSource( poDS );
+	MPI_Init(&argc, &argv);
+	int tid, numprocs;
+	MPI_Comm_rank(MPI_COMM_WORLD, &tid);
+	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     
+    int fieldIndex = atoi(argv[2]);
+    double lag = atof(argv[3]);
+    int lagcount = atoi(argv[4]);
+    if(lag < EPS || lagcount == 0){
+        print_usage();
+        MPI_Finalize();
+        return 0;
+    }
     
+    variogram(argv[1], fieldIndex, lag, lagcount, numprocs, tid);
+    MPI_Finalize();
     return 0;
 }
 

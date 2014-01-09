@@ -1,3 +1,5 @@
+并行克里格插值程序
+
 1. 参数列表：
 	[input file]：输入文件，shapefile
 	[output file]：输出文件，geotiff
@@ -22,10 +24,10 @@
 
 	加州的111个站点pm10的监测值，来自于ArcGIS的sample data。其中，pm值是第五个字段
 
-5. 变差函数使用的是球状模型
+5. 半变异函数使用的是球状模型
 
-			c,											h=0
-	r(h) =  c + cc * ( 3/2 * h/a - 1/2 * (h/a)^3)		0<h<=a
-			c + cc										h>a
+	                c,                                      h=0
+	r(h) =  c + cc * ( 3/2 * h/a - 1/2 * (h/a)^3)           0<h<=a
+	                c + cc                                  h>a
 
 	其中，c是块金值，cc是拱高，a是变程，h是变差，r(h)是半变异函数
