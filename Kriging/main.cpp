@@ -186,7 +186,7 @@ inline double distance(ANNpoint p1, ANNpoint p2)
 	return sqrt(x*x + y*y);
 }
 
-double dump_matrix(double** matrix, int xsize, int ysize)
+void dump_matrix(double** matrix, int xsize, int ysize)
 {
 	for(int i=0;i<ysize;i++)
 	{
@@ -309,7 +309,7 @@ void kriging(ANNpointArray ptArray, double* ptValues, ANNkd_tree* tree, int k, d
 	
 }
 
-int Test()
+void Test()
 {
 	int k = 4;
 	ANNpointArray ptArray = annAllocPts(k, 2);
@@ -381,6 +381,7 @@ int create_raster(const char* filename, double left, double top, int nXSize, int
 	poDstDS->SetProjection(spatialRefWkt);
 	CPLFree(spatialRefWkt);
 	GDALClose((GDALDatasetH)poDstDS);
+	return 0;
 }
 
 int open_raster(const char* filename, GDALDataset ** pDS, GDALRasterBand** pBand)
@@ -398,6 +399,7 @@ int open_raster(const char* filename, GDALDataset ** pDS, GDALRasterBand** pBand
 int close_raster(GDALDataset *pDS)
 {
 	GDALClose((GDALDatasetH)pDS);
+	return 0;
 }
 
 
@@ -448,15 +450,6 @@ int main(int argc, char** argv) {
 	string srcFile(argv[1]);
 	string dstFile(argv[2]);
 	
-    /*double pixelSize = 0.00055555556;// 0.00027777778; // std::atof(argv[4]); // 10000;
-	int k = 12; //std::atoi(argv[5]);// 32;
-	int fldIndex = 0; // std::atoi(argv[3]); //4;
-	double c = 0.75241; // std::atof(argv[6]); // 2;
-	double cc = 0.3106; // std::atof(argv[7]); //20.0;
-	double a = 4.98925; // std::atof(argv[8]); //100000.0;
-	string srcFile("/home/ricepig/data/hlj2.shp");
-	string dstFile("/home/ricepig/data/output7.tiff");*/
-    
 	if(tid==0){
         cout<<"[DEBUG] [OPTIONS] input file:"<<srcFile<<endl;
         cout<<"[DEBUG] [OPTIONS] output file:"<<dstFile<<endl;
