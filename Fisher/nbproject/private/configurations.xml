@@ -15,6 +15,9 @@
         </gdb_interceptlist>
         <gdb_options>
           <DebugOptions>
+            <option name="debug_command"
+                    value="Fisher -o aaa.tiff -pc class.tif -pl learn_band1.tif,learn_band2.tif,learn_band3.tif,learn_band4.tif,learn_band5.tif -pi infer_band1.tif,infer_band2.tif,infer_band3.tif,infer_band4.tif,infer_band5.tif "/>
+            <option name="debug_dir" value="/Users/Ricepig/Downloads/data"/>
           </DebugOptions>
         </gdb_options>
         <gdb_buildfirst gdb_buildfirst_overriden="false" gdb_buildfirst_old="false"/>
@@ -27,9 +30,10 @@
           <runcommandpicklistitem>"${OUTPUT_PATH}"</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" /home/ricepig/class1.tif /home/ricepig/data1.tif 1 2 3</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" /home/ricepig/class.tif /home/ricepig/data.tif 1 2 3 4 5 6 7</runcommandpicklistitem>
+          <runcommandpicklistitem>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl learn_band1.tif,learn_band2.tif,learn_band3.tif,learn_band4.tif,learn_band5.tif -pi infer_band1.tif,infer_band2.tif,infer_band3.tif,infer_band4.tif,infer_band5.tif </runcommandpicklistitem>
         </runcommandpicklist>
-        <runcommand>"${OUTPUT_PATH}" /home/ricepig/class.tif /home/ricepig/data.tif 1 2 3 4 5 6 7</runcommand>
-        <rundir></rundir>
+        <runcommand>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl learn_band1.tif,learn_band2.tif,learn_band3.tif,learn_band4.tif,learn_band5.tif -pi infer_band1.tif,infer_band2.tif,infer_band3.tif,infer_band4.tif,infer_band5.tif</runcommand>
+        <rundir>/Users/Ricepig/Downloads/data</rundir>
         <buildfirst>true</buildfirst>
         <terminal-type>0</terminal-type>
         <remove-instrumentation>0</remove-instrumentation>

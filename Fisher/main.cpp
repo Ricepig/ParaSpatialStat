@@ -2,6 +2,7 @@
 #include "mpi.h"
 #include "paramatrix.h"
 #include "parainvert.h"
+#include "string.h"
 #include "gdal_priv.h"
 #include "cpl_conv.h"
 #include "common.h"
@@ -22,23 +23,79 @@ void print_usage()
 	printf("fisher [classification raster] [raster 1] [raster 2] ... [raster n]\n");
 }
 
+char** split_tokens(char * arg, int& count){
+	const char signal = ',';
+	
+	count = 0;
+	cout<<"count:"<<arg<<endl;
+	for(int i=0;i<strlen(arg);i++){
+		if(arg[i] == signal)
+			count++;
+	}
+	
+	count++;
+	
+	char ** rt = (char**)malloc(sizeof(char*)*count);
+	char * token = strtok(arg, ",");
+	rt[0] = token;
+	int index = 1;
+	while((token = strtok(NULL, ","))){
+		if(index >= count)
+			return NULL;
+		rt[index] = token;
+		index++;
+	}
+	if(index != count)
+		return NULL;
+	return rt;
+}
+
 /**
- * check arguments
+ * parse arguments
  * @param argc
  * @param argv
  * @return true if arguments are valid
  */
-bool check_args(int argc, char **argv)
+bool parse_args(int argc, char **argv, char *** pLearnFiles, char *** pInferFiles, int * pBandCount, char ** pOutputFile, char** pClassFile)
 {
+	bool hasClass = false;
+	bool hasOutput = false;
+	bool hasLearn = false;
+	bool hasInfer = false;
+	int count1, count2;
+	
     for(int i=1;i<argc;i++){
-        if(strcmp(argv[i], "-h") || strcmp(argv[i], "--help")){
+		cout<<"args:"<<argv[i]<<endl;
+        
+		if(strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0){
             return false;
         }
+		
+		if(strcmp(argv[i], "-pc") == 0 && i+1<argc){
+			*pClassFile = argv[i+1];
+			hasClass = true;
+		} else if(strcmp(argv[i], "-o") == 0 && i+1<argc){
+			*pOutputFile = argv[i+1];
+			hasOutput = true;
+		} else if(strcmp(argv[i], "-pi") == 0 && i+1<argc){
+			*pInferFiles = split_tokens(argv[i+1], count1);
+			if(pInferFiles != NULL)
+				hasInfer = true;
+		} else if(strcmp(argv[i], "-pl") == 0 && i+1<argc){
+			*pLearnFiles = split_tokens(argv[i+1], count2);
+			if(pLearnFiles != NULL)
+				hasLearn = true;
+		}	
     }
-    if(argc<4){
-        return false;
-    }
-    return true;
+	
+	if(!hasOutput || !hasInfer || !hasLearn || !hasClass)
+		return false;
+	
+	if(count1!=count2)
+		return false;
+	
+	*pBandCount = count1;
+	return true;
 }
 
 void fatal(const char *message) {
@@ -51,8 +108,7 @@ int create_raster(const char* filename, double left, double top, int nXSize, int
 	const char *pszFormat = "GTiff";
 	
     GDALDriver *poDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
-    if( poDriver == NULL )
-	{
+    if( poDriver == NULL ){
 		printf("[ERROR] Can't find the driver for writing GeoTiff.\n");
 		return 1;
 	}
@@ -62,15 +118,13 @@ int create_raster(const char* filename, double left, double top, int nXSize, int
     poDstDS = poDriver->Create( filename, nXSize, nYSize, 1, GDT_Byte, 
                                 papszOptions );  
 	
-	if(poDstDS == NULL)
-	{
+	if(poDstDS == NULL){
 		printf("[ERROR] Can't create the raster file as output.\n");
 		return 1;
 	}
 	
 	double adfGeoTransform[6] = {left, pixelSize, 0, top, 0, -pixelSize};
 	poDstDS->SetGeoTransform(adfGeoTransform);
-	
 	poDstDS->SetProjection(spatialRefWkt);
 	
 	GDALClose((GDALDatasetH)poDstDS);
@@ -80,8 +134,7 @@ int create_raster(const char* filename, double left, double top, int nXSize, int
 int open_raster(const char* filename, GDALAccess eAccess, GDALDataset ** pDS, GDALRasterBand** pBand)
 {
 	*pDS = (GDALDataset*)GDALOpen(filename, eAccess);
-	if(*pDS == NULL)
-	{
+	if(*pDS == NULL){
 		printf("[ERROR] Can't open the output file.\n");
 		return 1;
 	}
@@ -177,7 +230,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     // Open rasters
     GDALDataset * pCateDataset;
     pCateDataset = (GDALDataset *) GDALOpen(classFile, GA_ReadOnly);
-    
+    cout<< "class:" << classFile<<endl;
     if(pCateDataset == NULL){
         cout<<"[ERROR] Can't open the classification file: "<< classFile << endl;
         exit(1);
@@ -186,6 +239,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     GDALDataset ** datasets = new GDALDataset*[bandCount];
     for(int i=0;i<bandCount;i++){
         datasets[i] = (GDALDataset *) GDALOpen(dataFiles[i], GA_ReadOnly );
+		cout<<"band:"<<dataFiles[i]<<endl;
         if(datasets[i] == NULL){
             cout<<"[ERROR] Can't open raster file: "<< dataFiles[i] << endl;
             exit(1);
@@ -291,11 +345,9 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     free(ss);
     
     MPI_Reduce(localS, S, scount, MPI_DOUBLE,  MPI_SUM, 0, MPI_COMM_WORLD);
-    
     // Stage 4: Calc reverse matrix of Sw and final result
     
-    invert(S, bandCount, 1, 0);
-    
+    invert(S, bandCount, 1, 0);    
     double* m12 = NULL;
     double* sum12 = NULL;
     double* w = NULL;
@@ -329,6 +381,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
 		benchmark.computing = t4-t1-iotime;
        
         free(w);
+		free(sum12);
         free(m12);
     }
     
@@ -338,9 +391,9 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     free(cat);
     free(scanline);
     
-    delete[] bands;
     GDALClose(pCateDataset);
-    for(int i=0;i<bandCount;i++){
+    delete[] bands;
+	for(int i=0;i<bandCount;i++){
         GDALClose(datasets[i]);
     }
     delete[] datasets;
@@ -349,7 +402,13 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
 }
         
 int main(int argc, char **argv) {
-    if(check_args(argc, argv)==false){
+	char ** pLearnFiles;
+	char * pClassFile;
+	char ** pInferFiles;
+	char * pOutputFile;
+	int bandCount;
+	
+	if(!parse_args(argc, argv, &pLearnFiles, &pInferFiles, &bandCount, &pOutputFile, &pClassFile)){
         print_usage();
         return 0;
     }
@@ -360,12 +419,12 @@ int main(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD,&rankSize); 
     MPI_Comm_rank(MPI_COMM_WORLD,&myRank);
 	struct Timespans benchmark1, benchmark2;
-	int bandCount = 6;
+	
 	double pivot = 0;
 	double* coefficients = new double[bandCount];
 	
-    fisher_training(argv[1], argv+2, argc-2, myRank, rankSize, &coefficients, pivot, benchmark1);
-	fisher_discriminating(argv+2, argc-2, argv[1], coefficients, pivot, myRank, rankSize, benchmark2);
+    fisher_training(pClassFile, pLearnFiles, bandCount, myRank, rankSize, &coefficients, pivot, benchmark1);
+	//fisher_discriminating(pInferFiles, bandCount, pOutputFile, coefficients, pivot, myRank, rankSize, benchmark2);
 	cout << "[OUTPUT] Phi: " << pivot << endl;
 	cout << "[OUTPUT] Discriminant function: ";
 	for(int i=0;i<bandCount;i++){
@@ -377,7 +436,8 @@ int main(int argc, char **argv) {
 	cout << "[DEBUG] [TIMESPAN] [IO] " << benchmark1.io + benchmark2.io << endl;
 	cout << "[DEBUG] [TIMESPAN] [COMPUTING] " << benchmark1.computing + benchmark2.computing << endl;
 	cout << "[DEBUG] [TIMESPAN] [TOTAL] " << benchmark1.io + benchmark2.io + benchmark1.computing + benchmark2.computing << endl;
-    MPI_Finalize();
+    delete[] coefficients;
+	MPI_Finalize();
     return 0;
 }
 
