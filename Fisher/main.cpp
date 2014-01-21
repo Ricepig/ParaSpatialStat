@@ -293,7 +293,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
             iotime += (t3-t2);
             for(int k=0;k<xSize;k++){
                 int sig = cat[k]>0?0:1;
-                if(scanline[k]>0)
+                if(scanline[k]>-9998)
                         totals[bandCount*sig+j] += scanline[k];                
             }
         }
@@ -301,9 +301,10 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     
     MPI_Allreduce(totals, means, bandCount*2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
-    for(int i=0;i<bandCount*2;i++)
+    for(int i=0;i<bandCount*2;i++){
         means[i] /= counts[2+i/bandCount];
-    
+	}
+	
     // Stage 3: Calc Sw
     int scount = bandCount*bandCount;
     
@@ -323,7 +324,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
                 int sig = cat[k]>0?0:1;
                 double avg = means[sig*bandCount+j];
                 double* sss = ss+k*scount;
-                double value = (scanline[k]<0?0:scanline[k])-avg;
+                double value = (scanline[k]<-9998?0:scanline[k])-avg;
                 for(int m=0;m<bandCount;m++){
                     if(j>m){
                         sss[j*bandCount+m] = sss[m*bandCount+j] = sss[j*bandCount+m] * value;
@@ -424,7 +425,7 @@ int main(int argc, char **argv) {
 	double* coefficients = new double[bandCount];
 	
     fisher_training(pClassFile, pLearnFiles, bandCount, myRank, rankSize, &coefficients, pivot, benchmark1);
-	//fisher_discriminating(pInferFiles, bandCount, pOutputFile, coefficients, pivot, myRank, rankSize, benchmark2);
+	fisher_discriminating(pInferFiles, bandCount, pOutputFile, coefficients, pivot, myRank, rankSize, benchmark2);
 	cout << "[OUTPUT] Phi: " << pivot << endl;
 	cout << "[OUTPUT] Discriminant function: ";
 	for(int i=0;i<bandCount;i++){
