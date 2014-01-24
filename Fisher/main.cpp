@@ -27,7 +27,7 @@ char** split_tokens(char * arg, int& count){
 	const char signal = ',';
 	
 	count = 0;
-	cout<<"count:"<<arg<<endl;
+	
 	for(int i=0;i<strlen(arg);i++){
 		if(arg[i] == signal)
 			count++;
@@ -65,8 +65,7 @@ bool parse_args(int argc, char **argv, char *** pLearnFiles, char *** pInferFile
 	int count1, count2;
 	
     for(int i=1;i<argc;i++){
-		cout<<"args:"<<argv[i]<<endl;
-        
+		
 		if(strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0){
             return false;
         }
@@ -155,7 +154,7 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	t1 = MPI_Wtime();
 	GDALDataset ** datasets = new GDALDataset*[bandCount];
 	GDALRasterBand **bands = new GDALRasterBand*[bandCount];
-	t2 = MPI_Wtime();
+	
     for(int i=0;i<bandCount;i++){
 		if(open_raster(dataFiles[i], GA_ReadOnly, datasets+i, bands+i)!=0)
 			return 1;
@@ -168,8 +167,8 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 			return 1;
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
-	t3 = MPI_Wtime();
-	double io_duration = t3-t2;
+	
+	double calc_duration = 0;
 	
 	GDALDataset * destset;
 	GDALRasterBand * destband;
@@ -181,31 +180,39 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	float* buffer = (float*)malloc(sizeof(float)*width); 
 	double* results = (double*)malloc(sizeof(double)*width);
 	char* buffer2 = (char*)malloc(sizeof(char)*width);
+	int count = 0;
 	for(int i=0;i<height+rankSize-1;i+=rankSize){
 		int row = i+myRank;
+		
 		if(row < height){
+			count++;
 			for(int j=0;j<bandCount;j++){
-				t2 = MPI_Wtime();
 				bands[j]->RasterIO(GF_Read, 0, row, width, 1, buffer, width, 1, GDT_Float32, 0, 0);
-				t3 = MPI_Wtime();
-				io_duration += t3-t2;
-				
+				t2 = MPI_Wtime();
 				for(int k=0;k<width;k++){
 					results[k] += (buffer[k] * coefficients[j]);
 				}
+				t3 = MPI_Wtime();
+				calc_duration += t3-t2;
 			}
+			t2 = MPI_Wtime();
 			for(int k=0;k<width;k++){
 				buffer2[k] = results[k]>pivot?0:1;
 			}
-			t2 = MPI_Wtime();
-			destband->RasterIO(GF_Write, 0, row, width, 1, buffer2, width, 1, GDT_Byte, 0, 0);
 			t3 = MPI_Wtime();
-			io_duration += t3-t2;
+			calc_duration += t3-t2;
+			
+			destband->RasterIO(GF_Write, 0, row, width, 1, buffer2, width, 1, GDT_Byte, 0, 0);
 			memset((void*)results, 0, sizeof(double)*width);
 		}
 	}
 	
-	MPI_Barrier(MPI_COMM_WORLD);
+	printf("thread %d, comp time: %f, rows: %d\n", myRank, calc_duration,count );
+	
+	double * temp = new double[2];
+	*temp = calc_duration;
+	MPI_Reduce(temp, temp+1, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	
 	free(buffer2);
 	free(results);
 	free(buffer);
@@ -217,9 +224,10 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	delete[] datasets;
 	t4 = MPI_Wtime();
 	if(myRank == 0){
-		benchmark.computing = t4-t1-io_duration;
-		benchmark.io = io_duration;
+		benchmark.computing = temp[1];
+		benchmark.io = t4-t1-temp[1];
 	}
+	delete[] temp;
 	return 0;
 }
 
@@ -230,7 +238,8 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     // Open rasters
     GDALDataset * pCateDataset;
     pCateDataset = (GDALDataset *) GDALOpen(classFile, GA_ReadOnly);
-    cout<< "class:" << classFile<<endl;
+	if(myRank==0)
+		cout<< "class:" << classFile<<endl;
     if(pCateDataset == NULL){
         cout<<"[ERROR] Can't open the classification file: "<< classFile << endl;
         exit(1);
@@ -239,7 +248,8 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     GDALDataset ** datasets = new GDALDataset*[bandCount];
     for(int i=0;i<bandCount;i++){
         datasets[i] = (GDALDataset *) GDALOpen(dataFiles[i], GA_ReadOnly );
-		cout<<"band:"<<dataFiles[i]<<endl;
+		if(myRank==0)
+			cout<<"band:"<<dataFiles[i]<<endl;
         if(datasets[i] == NULL){
             cout<<"[ERROR] Can't open raster file: "<< dataFiles[i] << endl;
             exit(1);
@@ -426,18 +436,20 @@ int main(int argc, char **argv) {
 	
     fisher_training(pClassFile, pLearnFiles, bandCount, myRank, rankSize, &coefficients, pivot, benchmark1);
 	fisher_discriminating(pInferFiles, bandCount, pOutputFile, coefficients, pivot, myRank, rankSize, benchmark2);
-	cout << "[OUTPUT] Phi: " << pivot << endl;
-	cout << "[OUTPUT] Discriminant function: ";
-	for(int i=0;i<bandCount;i++){
-		if(i>0)
-			cout<< " + ";
-		cout<<coefficients[i]<<"x"<<"X"<<(i+1);
-	}
-	cout << endl;
-	cout << "[DEBUG] [TIMESPAN] [IO] " << benchmark1.io + benchmark2.io << endl;
-	cout << "[DEBUG] [TIMESPAN] [COMPUTING] " << benchmark1.computing + benchmark2.computing << endl;
-	cout << "[DEBUG] [TIMESPAN] [TOTAL] " << benchmark1.io + benchmark2.io + benchmark1.computing + benchmark2.computing << endl;
-    delete[] coefficients;
+	if(myRank==0){
+		cout << "[OUTPUT] Phi: " << pivot << endl;
+		cout << "[OUTPUT] Discriminant function: ";
+		for(int i=0;i<bandCount;i++){
+			if(i>0)
+				cout<< " + ";
+			cout<<coefficients[i]<<"x"<<"X"<<(i+1);
+		}
+		cout << endl;
+		cout << "[DEBUG] [TIMESPAN] [IO] " << benchmark1.io + benchmark2.io << endl;
+		cout << "[DEBUG] [TIMESPAN] [COMPUTING] " << benchmark1.computing + benchmark2.computing << endl;
+		cout << "[DEBUG] [TIMESPAN] [TOTAL] " << benchmark1.io + benchmark2.io + benchmark1.computing + benchmark2.computing << endl;
+    }
+	delete[] coefficients;
 	MPI_Finalize();
     return 0;
 }
