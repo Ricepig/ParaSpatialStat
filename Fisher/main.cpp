@@ -180,6 +180,7 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	float* buffer = (float*)malloc(sizeof(float)*width); 
 	double* results = (double*)malloc(sizeof(double)*width);
 	char* buffer2 = (char*)malloc(sizeof(char)*width);
+	
 	int count = 0;
 	for(int i=0;i<height+rankSize-1;i+=rankSize){
 		int row = i+myRank;
@@ -187,13 +188,15 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 		if(row < height){
 			count++;
 			for(int j=0;j<bandCount;j++){
+				
 				bands[j]->RasterIO(GF_Read, 0, row, width, 1, buffer, width, 1, GDT_Float32, 0, 0);
 				t2 = MPI_Wtime();
 				for(int k=0;k<width;k++){
-					results[k] += (buffer[k] * coefficients[j]);
+					results[k] += ((float)coefficients[j])*buffer[k];
 				}
 				t3 = MPI_Wtime();
 				calc_duration += t3-t2;
+				
 			}
 			t2 = MPI_Wtime();
 			for(int k=0;k<width;k++){
@@ -212,10 +215,10 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	double * temp = new double[2];
 	*temp = calc_duration;
 	MPI_Reduce(temp, temp+1, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	
+	free(buffer);
 	free(buffer2);
 	free(results);
-	free(buffer);
+	
 	
     close_raster(destset);
 	for(int j=0;j<bandCount;j++)

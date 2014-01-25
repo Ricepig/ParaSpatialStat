@@ -15,13 +15,13 @@ CND_PACKAGE_DIR_Debug=dist/Debug/GNU-Linux-x86/package
 CND_PACKAGE_NAME_Debug=fisher.tar
 CND_PACKAGE_PATH_Debug=dist/Debug/GNU-Linux-x86/package/fisher.tar
 # Release configuration
-CND_PLATFORM_Release=GNU-MacOSX
-CND_ARTIFACT_DIR_Release=dist/Release/GNU-MacOSX
+CND_PLATFORM_Release=GNU-Linux-x86
+CND_ARTIFACT_DIR_Release=dist/Release/GNU-Linux-x86
 CND_ARTIFACT_NAME_Release=fisher
-CND_ARTIFACT_PATH_Release=dist/Release/GNU-MacOSX/fisher
-CND_PACKAGE_DIR_Release=dist/Release/GNU-MacOSX/package
+CND_ARTIFACT_PATH_Release=dist/Release/GNU-Linux-x86/fisher
+CND_PACKAGE_DIR_Release=dist/Release/GNU-Linux-x86/package
 CND_PACKAGE_NAME_Release=fisher.tar
-CND_PACKAGE_PATH_Release=dist/Release/GNU-MacOSX/package/fisher.tar
+CND_PACKAGE_PATH_Release=dist/Release/GNU-Linux-x86/package/fisher.tar
 #
 # include compiler specific variables
 #
