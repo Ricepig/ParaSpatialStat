@@ -219,7 +219,7 @@ void fill_matrix(int k, double c, double cc, double** matrix)
 
 /*
  * params:
- * k: k-th nearest neighbors
+ * k: k-th nearest neighbors			
  * c: nugget
  * cc: 
  * a: range
@@ -543,7 +543,6 @@ int main(int argc, char** argv) {
         t01 = MPI_Wtime();
         if(tid==0)
         {
-            //printf("node 0: (%d,%d),size(%d, %d)\n", j*xStride, i*yStride+n, output.nXSize, 1);
             pBand->RasterIO(GF_Write, j*xStride, i*yStride+n, output.nXSize, 1, (void*)output.pValues, output.nXSize, 1, GDT_Float32, 0, 0);
  
             int nXSize2;
@@ -557,9 +556,7 @@ int main(int argc, char** argv) {
                 if(li*yStride+n<nYSize)
                 {
                     nXSize2 = (lj+1)*xStride>nXSize?nXSize-lj*xStride:xStride;
-                    
                     MPI_Recv(buffer, nXSize2, MPI_FLOAT, k, 99, MPI_COMM_WORLD, &status);
-                    //printf("node %d: (%d,%d),size(%d, %d)\n", k, lj*xStride, li*yStride+n, nXSize2, 1);
                     pBand->RasterIO(GF_Write, lj*xStride, li*yStride+n, nXSize2, 1, (void*)buffer, nXSize2, 1, GDT_Float32, 0, 0);
                 }
                 

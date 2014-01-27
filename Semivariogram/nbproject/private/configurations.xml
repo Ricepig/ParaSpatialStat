@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configurationDescriptor version="90">
+<configurationDescriptor version="91">
   <projectmakefile>Makefile</projectmakefile>
   <confs>
     <conf name="Debug" type="1">
@@ -15,6 +15,8 @@
         </gdb_interceptlist>
         <gdb_options>
           <DebugOptions>
+            <option name="debug_command" value="&quot;${OUTPUT_PATH}&quot; cities.shp 6 3 9"/>
+            <option name="debug_dir" value="/home/ricepig/data"/>
           </DebugOptions>
         </gdb_options>
         <gdb_buildfirst gdb_buildfirst_overriden="false" gdb_buildfirst_old="false"/>

@@ -15,6 +15,7 @@
 #include "mpi.h"
 
 #define EPSILON 0.0000001
+#define DEBUG
 
 using namespace std;
 
@@ -58,8 +59,8 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
                     fatal("The layer type is restricted to point.");
             
                 OGRPoint *poPoint = (OGRPoint*)poGeometry;
-                
-                ECAdd(&ec, poPoint->getX(), poPoint->getY(), (float)poFeature->GetFieldAsDouble(fieldIndex));
+                float value = (float)poFeature->GetFieldAsDouble(3);
+                ECAdd(&ec, poPoint->getX(), poPoint->getY(), value);
             }
             
         }
@@ -75,9 +76,9 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
 inline void inner_classify(struct Element* poE1, struct Element* poE2, struct LagContainer *lc, double lag, double range)
 {
     double dist = sqrt((poE1->X - poE2->X) * (poE1->X - poE2->X) + (poE1->Y - poE2->Y) * (poE1->Y - poE2->Y));
-    if(dist <= range)
+    if(dist < range)
     {
-        int index = (dist + lag - EPSILON)/lag;
+        int index = dist/lag;
         (lc->counts[index])++;
         (lc->sums[index]) += fabs(poE1->Value - poE2->Value);
     }
@@ -90,7 +91,7 @@ void classify_cross(struct ElementContainer* ec1, struct ElementContainer* ec2, 
     
     for(size_t i=0;i<ec1->Length;i++, poE1++){
         struct Element* poE2 = ec2->Head;
-        for(size_t j=0;j<ec1->Length;j++, poE2++)
+        for(size_t j=0;j<ec2->Length;j++, poE2++)
             inner_classify(poE1, poE2, lc, lag, range);
     }
         
@@ -102,8 +103,9 @@ void classify_self(struct ElementContainer* ec, struct LagContainer *lc, double 
     struct Element* poE1 = ec->Head;
     for(size_t i=0;i<ec->Length;i++, poE1++){
         struct Element* poE2 = ec->Head+i+1;
-        for(size_t j=i+1;j<ec->Length;j++, poE2++)
+        for(size_t j=i+1;j<ec->Length;j++, poE2++){
             inner_classify(poE1, poE2, lc, lag, range);
+		}
     }
 }
 
@@ -113,6 +115,7 @@ double ** new_matrix(int row, int col)
     for(int i=0;i<row;i++){
         matrix[i] = new double[col];
     }
+	return matrix;
 }
 
 void delete_matrix(double ** matrix, int row)
@@ -142,25 +145,27 @@ void OLS_spheroid(struct LagContainer * lc, double lag, int rankSize, int myRank
         double ** matrix = new_matrix(3, 4);
         for(int i=0;i<lc->size;i++)
         {
-            double x1 = lag * i + lag / 2;
-            double d2 = x1 * x1;
-            double x2 = - d2 * x1;
-            matrix[0][0]++;
-            matrix[0][1] += x1;
-            matrix[0][2] += x2;
-            matrix[0][3] += lc->sums[i];
-            matrix[1][1] += d2;
-            matrix[1][2] += x1 * x2;
-            matrix[1][3] += lc->sums[i] * x1;
-            matrix[2][2] += x2 * x2;
-            matrix[2][3] += lc->sums[i] * x2;
+			if(lc->counts[i]>0){
+				double x1 = lag * i + lag / 2;
+				double d2 = x1 * x1;
+				double x2 = - d2 * x1;
+				matrix[0][0]++;
+				matrix[0][1] += x1;
+				matrix[0][2] += x2;
+				matrix[0][3] += lc->sums[i];
+				matrix[1][1] += d2;
+				matrix[1][2] += x1 * x2;
+				matrix[1][3] += lc->sums[i] * x1;
+				matrix[2][2] += x2 * x2;
+				matrix[2][3] += lc->sums[i] * x2;
+			}
         }
         matrix[1][0] = matrix[0][1];
         matrix[2][0] = matrix[0][2];
         matrix[2][1] = matrix[1][2];
         
 #ifdef DEBUG
-        print_matrix(matrix, 3, 4);
+        print_matrix(matrix, 4, 3);
 #endif        
         guass_eliminator(matrix, 3);
         *c0 = matrix[0][3];
@@ -187,11 +192,9 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
     struct LagContainer lc;
     LCInit(&lc, lagCount);
     
-    double sqLag = lag*lag;
-    
     int blockSize = (count + rankSize - 1)/rankSize;
     struct ElementContainer ec2;
-    ECInitWithSize(&ec2, blockSize);
+	ECClone(&ec2, &ec);
     
     for(int i=0;i<rankSize;i++)
     {
@@ -199,21 +202,28 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
         MPI_Bcast(ec2.Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
         ec2.Length = currentSize;
         if(i==myRank){
-            classify_self(&ec, &lc, sqLag, lagCount);
+            classify_self(&ec, &lc, lag, lagCount);
         }else{
             if(i<myRank)
-                classify_cross(&ec, &ec2, &lc, sqLag, lagCount);
+                classify_cross(&ec, &ec2, &lc, lag, lagCount);
         }
     }
-    
+	
+	
     struct LagContainer lc2;
     LCInit(&lc2, lagCount);
     MPI_Allreduce(lc.counts, lc2.counts, lc.size, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(lc.sums, lc2.sums, lc.size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    
-    LCCalcAverage(&lc);
+	if(myRank==0)
+	{
+    for(int i=0;i<lc.size;i++){
+		printf("thread %d, lag %d, count %d, sum %f\n",myRank, i, lc2.counts[i], lc2.sums[i]);
+	}
+	}
+	
+    LCCalcAverage(&lc2);
     double c, c0, a;
-    OLS_spheroid(&lc, lag, rankSize, myRank, &c0, &c, &a);
+    OLS_spheroid(&lc2, lag, rankSize, myRank, &c0, &c, &a);
     double t3 = MPI_Wtime();
     LCDestory(&lc2);
     ECDestory(&ec2);
@@ -228,7 +238,8 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
         cout << "[OUTPUT] C0: " << c0 << endl;
         cout << "[OUTPUT] C: " << c << endl;
         cout << "[OUTPUT] a: " << a << endl;
-    }    
+    }  
+	return 0;
 }
 
 int main(int argc, char** argv) {

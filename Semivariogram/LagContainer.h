@@ -22,7 +22,9 @@ struct LagContainer
 void LCInit(struct LagContainer * lc, size_t size)
 {
     lc->sums = (double*)malloc(sizeof(double)*size);
+    memset(lc->sums, 0, sizeof(double)*size);
     lc->counts = (int*)malloc(sizeof(int)*size);
+    memset(lc->counts, 0, sizeof(int)*size);
     lc->size = size;
 }
 
