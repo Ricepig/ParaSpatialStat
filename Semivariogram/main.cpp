@@ -2,7 +2,6 @@
  * File:   main.cpp
  * Author: ricepig
  *
- * Created on 2013年11月30日, 下午11:13
  */
 
 #include <cstdlib>
@@ -15,7 +14,6 @@
 #include "mpi.h"
 
 #define EPSILON 0.0000001
-#define DEBUG
 
 using namespace std;
 
@@ -33,7 +31,7 @@ void print_usage()
 
 struct ElementContainer loadData(const char * shapefile, int fieldIndex, int rankSize, int myRank, int *pcount)
 {
-    OGRDataSource *poDS = OGRSFDriverRegistrar::Open(shapefile, FALSE);
+	OGRDataSource* poDS = OGRSFDriverRegistrar::Open(shapefile, FALSE );
     if(poDS == NULL)
         fatal("Can't open the data source.");
     string path(shapefile);
@@ -59,7 +57,7 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
                     fatal("The layer type is restricted to point.");
             
                 OGRPoint *poPoint = (OGRPoint*)poGeometry;
-                float value = (float)poFeature->GetFieldAsDouble(3);
+                float value = (float)poFeature->GetFieldAsDouble(fieldIndex);
                 ECAdd(&ec, poPoint->getX(), poPoint->getY(), value);
             }
             
@@ -94,7 +92,8 @@ void classify_cross(struct ElementContainer* ec1, struct ElementContainer* ec2, 
         for(size_t j=0;j<ec2->Length;j++, poE2++)
             inner_classify(poE1, poE2, lc, lag, range);
     }
-        
+	
+    //printf("cross: %d*%d=%d\n", ec1->Length, ec2->Length, ec1->Length * ec2->Length);
 }
 
 void classify_self(struct ElementContainer* ec, struct LagContainer *lc, double lag, int lagCount)
@@ -102,11 +101,14 @@ void classify_self(struct ElementContainer* ec, struct LagContainer *lc, double 
     double range = lag * lagCount;
     struct Element* poE1 = ec->Head;
     for(size_t i=0;i<ec->Length;i++, poE1++){
-        struct Element* poE2 = ec->Head+i+1;
-        for(size_t j=i+1;j<ec->Length;j++, poE2++){
-            inner_classify(poE1, poE2, lc, lag, range);
+        struct Element* poE2 = ec->Head;
+        for(size_t j=0;j<ec->Length;j++, poE2++){
+			if(i!=j)
+				inner_classify(poE1, poE2, lc, lag, range);
 		}
     }
+	
+	//printf("self: %d*%d=%d\n", ec->Length, ec->Length, ec->Length * ec->Length - ec->Length);
 }
 
 double ** new_matrix(int row, int col)
@@ -139,9 +141,14 @@ void print_matrix(double** matrix, int sizex, int sizey)
 }
 #endif
 
-void OLS_spheroid(struct LagContainer * lc, double lag, int rankSize, int myRank, double * c0, double *c, double *a)
+ void OLS_spheroid(struct LagContainer * lc, double lag, int rankSize, int myRank, double * c0, double *c, double *a)
 {
     if(myRank == 0){
+		for(int i=0;i<lc->size;i++)
+		{
+			printf("%f\n", lc->sums[i]);
+		}
+		
         double ** matrix = new_matrix(3, 4);
         for(int i=0;i<lc->size;i++)
         {
@@ -194,32 +201,26 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
     
     int blockSize = (count + rankSize - 1)/rankSize;
     struct ElementContainer ec2;
-	ECClone(&ec2, &ec);
+	ECInitWithSize(&ec2, blockSize);
+	
     
     for(int i=0;i<rankSize;i++)
     {
-        int currentSize = blockSize*(rankSize-1) + i <= count?blockSize:blockSize-1;
-        MPI_Bcast(ec2.Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
-        ec2.Length = currentSize;
-        if(i==myRank){
+        int currentSize = (blockSize-1)*rankSize + i < count?blockSize:blockSize-1;
+		if(i==myRank){
+			MPI_Bcast(ec.Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
             classify_self(&ec, &lc, lag, lagCount);
         }else{
-            if(i<myRank)
+			MPI_Bcast(ec2.Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
+			ec2.Length = currentSize;
                 classify_cross(&ec, &ec2, &lc, lag, lagCount);
         }
     }
 	
-	
-    struct LagContainer lc2;
+	struct LagContainer lc2;
     LCInit(&lc2, lagCount);
     MPI_Allreduce(lc.counts, lc2.counts, lc.size, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(lc.sums, lc2.sums, lc.size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	if(myRank==0)
-	{
-    for(int i=0;i<lc.size;i++){
-		printf("thread %d, lag %d, count %d, sum %f\n",myRank, i, lc2.counts[i], lc2.sums[i]);
-	}
-	}
 	
     LCCalcAverage(&lc2);
     double c, c0, a;

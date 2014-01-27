@@ -40,14 +40,6 @@ void ECInitWithSize(struct ElementContainer* ec, size_t size)
     ec->Length = 0;
 }
 
-void ECClone(struct ElementContainer* to, struct ElementContainer* from)
-{
-    to->Head = (struct Element *)malloc(sizeof(Element) * (from->Size));
-    to->Size = from->Size;
-    to->Length = from->Length;
-    memcpy(to->Head, from->Head, sizeof(Element)*(from->Length));
-}
-
 static void ECRealloc(struct ElementContainer* ec)
 {
     struct Element* dest = (struct Element*)malloc(sizeof(struct Element) * ec->Size * 2);
