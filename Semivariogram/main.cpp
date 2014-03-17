@@ -29,14 +29,15 @@ void print_usage()
 	printf("Semivariogram [input file] [field index] [lag] [lag count]\n");
 }
 
-struct ElementContainer loadData(const char * shapefile, int fieldIndex, int rankSize, int myRank, int *pcount)
+struct ElementContainer loadData(const char * shapefile, int fieldIndex, double samplingRate, int rankSize, int myRank, int *pcount)
 {
 	OGRDataSource* poDS = OGRSFDriverRegistrar::Open(shapefile, FALSE );
     if(poDS == NULL)
         fatal("Can't open the data source.");
     string path(shapefile);
-    int pos = path.find_last_of("\\");
-    OGRLayer  *poLayer = poDS->GetLayerByName( path.substr(pos+1, path.length()-pos-5).c_str() );
+    int pos = path.find_last_of("//");
+	string layer = path.substr(pos+1, path.length()-pos-5);
+    OGRLayer  *poLayer = poDS->GetLayerByName( layer.c_str() );
     if(poLayer == NULL)
         fatal("Can't open the data source.");
     
@@ -45,29 +46,39 @@ struct ElementContainer loadData(const char * shapefile, int fieldIndex, int ran
     
     OGRFeature *poFeature;
     int count = 0;
+	int localcount = 0;
+	int stride = (int)(1 / samplingRate);
     poLayer->ResetReading();
+	
     while( (poFeature = poLayer->GetNextFeature()) != NULL )
     {
-        if(count % rankSize == myRank)
-        {
-            OGRGeometry *poGeometry = poFeature->GetGeometryRef();
-            if(poGeometry != NULL){
-                
-                if(wkbFlatten(poGeometry->getGeometryType()) != wkbPoint)
-                    fatal("The layer type is restricted to point.");
-            
-                OGRPoint *poPoint = (OGRPoint*)poGeometry;
-                float value = (float)poFeature->GetFieldAsDouble(fieldIndex);
-                ECAdd(&ec, poPoint->getX(), poPoint->getY(), value);
-            }
-            
-        }
-        OGRFeature::DestroyFeature( poFeature );
-        count++;
-    }
+		if(count % stride == 0){
+			if(localcount % rankSize == myRank){
+				OGRGeometry *poGeometry = poFeature->GetGeometryRef();
+				if(poGeometry != NULL){
 
+					if(wkbFlatten(poGeometry->getGeometryType()) != wkbPoint)
+						fatal("The layer type is restricted to point.");
+
+					OGRPoint *poPoint = (OGRPoint*)poGeometry;
+					float value = (float)poFeature->GetFieldAsDouble(fieldIndex);
+					//if(value>0)
+						ECAdd(&ec, poPoint->getX(), poPoint->getY(), value);
+				}
+			}
+			localcount++;            
+        }
+        OGRFeature::DestroyFeature( poFeature );       
+		count++;
+    }
+	
+	int * counts = new int[2];
+	counts[0] = ec.Length;
+	MPI_Allreduce(counts, counts+1, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+	
     OGRDataSource::DestroyDataSource( poDS );
-    *pcount = count;
+    *pcount = counts[1];
+	cout << "Node " << myRank << ":"<<ec.Length<<","<<*pcount<<endl;
     return ec;
 }
 
@@ -139,16 +150,22 @@ void print_matrix(double** matrix, int sizex, int sizey)
         printf("\n"); 
     }
 }
+
+void print_lags(struct LagContainer * lc){
+	for(int i=0;i<lc->size;i++)
+	{
+		printf("lag %d: sum: %f, count: %d\n", i+1, lc->sums[i], lc->counts[i]);
+	}
+		
+}
 #endif
 
  void OLS_spheroid(struct LagContainer * lc, double lag, int rankSize, int myRank, double * c0, double *c, double *a)
 {
+#ifdef DEBUG
+	print_lags(lc);
+#endif
     if(myRank == 0){
-		for(int i=0;i<lc->size;i++)
-		{
-			printf("%f\n", lc->sums[i]);
-		}
-		
         double ** matrix = new_matrix(3, 4);
         for(int i=0;i<lc->size;i++)
         {
@@ -183,7 +200,7 @@ void print_matrix(double** matrix, int sizex, int sizey)
     
 }
 
-int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, int rankSize, int myRank)
+int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, double samplingRate, int rankSize, int myRank)
 {
     if(myRank == 0){
         cout<<"[DEBUG] [OPTIONS] input file:"<<shapefile<<endl;
@@ -194,7 +211,7 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
     int count;
     
     double t1 = MPI_Wtime();
-    struct ElementContainer ec = loadData(shapefile, fieldIndex, rankSize, myRank, &count);
+    struct ElementContainer ec = loadData(shapefile, fieldIndex, samplingRate, rankSize, myRank, &count);
     double t2 = MPI_Wtime();
     struct LagContainer lc;
     LCInit(&lc, lagCount);
@@ -203,7 +220,6 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
     struct ElementContainer ec2;
 	ECInitWithSize(&ec2, blockSize);
 	
-    
     for(int i=0;i<rankSize;i++)
     {
         int currentSize = (blockSize-1)*rankSize + i < count?blockSize:blockSize-1;
@@ -213,7 +229,8 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
         }else{
 			MPI_Bcast(ec2.Head, currentSize*sizeof(struct Element), MPI_BYTE, i, MPI_COMM_WORLD);
 			ec2.Length = currentSize;
-                classify_cross(&ec, &ec2, &lc, lag, lagCount);
+			cout<<"[DEBUG] node "<<myRank<<", calc size："<<currentSize<<endl;
+			classify_cross(&ec, &ec2, &lc, lag, lagCount);
         }
     }
 	
@@ -234,8 +251,7 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
     if(myRank==0){
         cout<<"[DEBUG] [TIMESPAN] [IO] "<< t2-t1  << endl;
         cout<<"[DEBUG] [TIMESPAN] [COMPUTING] "<< t3-t2 << endl;
-        cout<<"[DEBUG] [TIMESPAN] [TOTAL]"<< t3-t1 << endl; 
-        
+        cout<<"[DEBUG] [TIMESPAN] [TOTAL]"<< t3-t1 << endl;
         cout << "[OUTPUT] C0: " << c0 << endl;
         cout << "[OUTPUT] C: " << c << endl;
         cout << "[OUTPUT] a: " << a << endl;
@@ -245,7 +261,7 @@ int variogram(const char* shapefile, int fieldIndex, double lag, int lagCount, i
 
 int main(int argc, char** argv) {
     
-    if(argc != 5){
+    if(argc != 5 && argc != 6){
         print_usage();
         return 0;
     }
@@ -259,13 +275,14 @@ int main(int argc, char** argv) {
     int fieldIndex = atoi(argv[2]);
     double lag = atof(argv[3]);
     int lagcount = atoi(argv[4]);
+	double percentage = argc==5? 1.0:atof(argv[5]);
     if(lag < EPS || lagcount == 0){
         print_usage();
         MPI_Finalize();
         return 0;
     }
     
-    variogram(argv[1], fieldIndex, lag, lagcount, numprocs, tid);
+    variogram(argv[1], fieldIndex, lag, lagcount, percentage, numprocs, tid);
     MPI_Finalize();
     return 0;
 }

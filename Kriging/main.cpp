@@ -219,7 +219,7 @@ void fill_matrix(int k, double c, double cc, double** matrix)
 
 /*
  * params:
- * k: k-th nearest neighbors
+ * k: k-th nearest neighbors			
  * c: nugget
  * cc: 
  * a: range
@@ -504,6 +504,7 @@ int main(int argc, char** argv) {
 	int xStride = (nXSize - 1)/col + 1;
 	int yStride = (nYSize - 1)/row + 1;
 	
+	
 	GDALDataset * pDS;
 	GDALRasterBand* pBand;
 	
@@ -523,6 +524,9 @@ int main(int argc, char** argv) {
 	int localYSize = (i+1)*yStride>nYSize?nYSize-i*yStride:yStride;
 	
     output.nYSize = 1;
+	
+	//cout<<"[DEBUG] Thread " << tid << ", xsize: " << output.nXSize <<", ysize: "<< output.nYSize;
+	//cout<<", xStride: "<<xStride<<", yStride: "<<yStride<<endl;
     
     output.pValues = new float[xStride];
     
@@ -543,7 +547,6 @@ int main(int argc, char** argv) {
         t01 = MPI_Wtime();
         if(tid==0)
         {
-            //printf("node 0: (%d,%d),size(%d, %d)\n", j*xStride, i*yStride+n, output.nXSize, 1);
             pBand->RasterIO(GF_Write, j*xStride, i*yStride+n, output.nXSize, 1, (void*)output.pValues, output.nXSize, 1, GDT_Float32, 0, 0);
  
             int nXSize2;
@@ -557,17 +560,17 @@ int main(int argc, char** argv) {
                 if(li*yStride+n<nYSize)
                 {
                     nXSize2 = (lj+1)*xStride>nXSize?nXSize-lj*xStride:xStride;
-                    
-                    MPI_Recv(buffer, nXSize2, MPI_FLOAT, k, 99, MPI_COMM_WORLD, &status);
-                    //printf("node %d: (%d,%d),size(%d, %d)\n", k, lj*xStride, li*yStride+n, nXSize2, 1);
-                    pBand->RasterIO(GF_Write, lj*xStride, li*yStride+n, nXSize2, 1, (void*)buffer, nXSize2, 1, GDT_Float32, 0, 0);
+                    MPI_Recv(buffer, nXSize2, MPI_FLOAT, k, 0, MPI_COMM_WORLD, &status);
+					pBand->RasterIO(GF_Write, lj*xStride, li*yStride+n, nXSize2, 1, (void*)buffer, nXSize2, 1, GDT_Float32, 0, 0);
                 }
                 
             }
         }
         else
         {
-            MPI_Send((void*)output.pValues, output.nXSize*output.nYSize, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);   
+			if(n<localYSize){
+				MPI_Send((void*)output.pValues, output.nXSize*output.nYSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);   
+			}
         }
         t02 = MPI_Wtime();
         atime += (t02-t01);
@@ -630,7 +633,11 @@ int main(int argc, char** argv) {
 	delete[] values;
 	
 	annClose();
+	
+	//MPI_Barrier(MPI_COMM_WORLD);
+	//cout<<"[DEBUG] Thread " << tid << " finished."<< endl;
 	MPI_Finalize();
+	//cout<<"[DEBUG] Thread " << tid << " finalized."<< endl;
 }
 
 
