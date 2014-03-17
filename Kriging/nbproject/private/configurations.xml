@@ -15,6 +15,8 @@
         </gdb_interceptlist>
         <gdb_options>
           <DebugOptions>
+            <option name="debug_command"
+                    value="kriging ~/sc_p/sc_p_3w.shp ~/sc_p/kriging.tif 3 100 12 8018 69420 330141"/>
           </DebugOptions>
         </gdb_options>
         <gdb_buildfirst gdb_buildfirst_overriden="false" gdb_buildfirst_old="false"/>

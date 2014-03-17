@@ -15,7 +15,8 @@
         </gdb_interceptlist>
         <gdb_options>
           <DebugOptions>
-            <option name="debug_command" value="&quot;${OUTPUT_PATH}&quot; hlj.shp 7 0.53967 12"/>
+            <option name="debug_command"
+                    value="&quot;${OUTPUT_PATH}&quot; /home/ricepig/sc_p/sc_p_3w.shp 3 36875 12"/>
             <option name="debug_dir" value="/home/ricepig/data"/>
           </DebugOptions>
         </gdb_options>
