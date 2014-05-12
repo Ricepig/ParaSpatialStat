@@ -6,6 +6,9 @@
 #include "gdal_priv.h"
 #include "cpl_conv.h"
 #include "common.h"
+#include "math.h"
+
+#define EPS 0.0000001
 
 using namespace std;
 
@@ -154,10 +157,16 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	t1 = MPI_Wtime();
 	GDALDataset ** datasets = new GDALDataset*[bandCount];
 	GDALRasterBand **bands = new GDALRasterBand*[bandCount];
-	
+	double * nodatas = new double[bandCount];
     for(int i=0;i<bandCount;i++){
 		if(open_raster(dataFiles[i], GA_ReadOnly, datasets+i, bands+i)!=0)
+		{
 			return 1;
+		}
+		else
+		{
+			nodatas[i] = bands[i]->GetNoDataValue();
+		}
     }
     if(myRank == 0){
 		double adfGeoTransform[6];
@@ -174,6 +183,8 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	GDALRasterBand * destband;
 	if(open_raster(outputFile, GA_Update, &destset, &destband) != 0)
 		return 1;
+	
+	double nodata = destband->GetNoDataValue();
 	
 	int width = destband->GetXSize();
 	int height = destband->GetYSize();
@@ -192,7 +203,15 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 				bands[j]->RasterIO(GF_Read, 0, row, width, 1, buffer, width, 1, GDT_Float32, 0, 0);
 				t2 = MPI_Wtime();
 				for(int k=0;k<width;k++){
-					results[k] += ((float)coefficients[j])*buffer[k];
+					if(fabs(buffer[k]-nodatas[j])<EPS || fabs(results[k]-nodata)<EPS)
+					{
+						results[k] = nodata;
+					}
+					else
+					{
+						results[k] += ((float)coefficients[j])*buffer[k];
+					}
+					
 				}
 				t3 = MPI_Wtime();
 				calc_duration += t3-t2;
@@ -200,7 +219,14 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 			}
 			t2 = MPI_Wtime();
 			for(int k=0;k<width;k++){
-				buffer2[k] = results[k]>pivot?0:1;
+				if(fabs(results[k]-nodata)<EPS)
+				{
+					buffer2[k] = (char)((int)nodata);
+				}
+				else
+				{
+					buffer2[k] = results[k]>pivot?1:0;
+				}
 			}
 			t3 = MPI_Wtime();
 			calc_duration += t3-t2;
@@ -261,8 +287,10 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     
     GDALRasterBand *catBand = pCateDataset->GetRasterBand(1);
     GDALRasterBand **bands = new GDALRasterBand*[bandCount];
+	double * nodatas = (double*)malloc(sizeof(double)*bandCount);
     for(int i=0;i<bandCount;i++){
         bands[i] = datasets[i]->GetRasterBand(1); 
+		nodatas[i] = bands[i]->GetNoDataValue();
     }
     
     // Stage 1: Calc item count for each categories
@@ -275,7 +303,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     scanline = (float *) CPLMalloc(sizeof(float)*xSize);
     float * cat = (float *)CPLMalloc(sizeof(float)*xSize);
     int * counts = (int*)malloc(sizeof(int)*4);
-    
+    double nodata = catBand->GetNoDataValue();
     memset(counts, 0 , sizeof(int)*4);
     for(int i=myRank*blocksize;i<myRank*blocksize+localsize;i++){
         t2 = MPI_Wtime();
@@ -283,6 +311,7 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
         t3 = MPI_Wtime();
         iotime += (t3-t2);
         for(int k=0;k<xSize;k++){
+			if(fabs(cat[k]-nodata)<EPS) continue;
             int sig = cat[k]>0?0:1;            
             counts[sig]++;
         }
@@ -291,6 +320,8 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
     
     double * totals = (double*)malloc(sizeof(double)*bandCount*4);
     double * means = totals+bandCount*2; 
+	
+	
     memset(totals, 0 , sizeof(double)*bandCount*4);
     
     // Stage 2: Calc Mi
@@ -299,15 +330,16 @@ int fisher_training(const char * classFile, char ** dataFiles, int bandCount, in
         catBand->RasterIO(GF_Read,0, i, xSize, 1, cat, xSize, 1, GDT_Float32, 0, 0 );
         t3 = MPI_Wtime();
         iotime += (t3-t2);
+		
         for(int j=0;j<bandCount;j++){
             t2 = MPI_Wtime();
             bands[j]->RasterIO(GF_Read, 0, i, xSize, 1, scanline, xSize, 1, GDT_Float32, 0, 0);
             t3 = MPI_Wtime();
             iotime += (t3-t2);
             for(int k=0;k<xSize;k++){
+				if(fabs(cat[k]-nodata)<EPS || fabs(scanline[k]-nodatas[j])<EPS) continue;
                 int sig = cat[k]>0?0:1;
-                if(scanline[k]>-9998)
-                        totals[bandCount*sig+j] += scanline[k];                
+				totals[bandCount*sig+j] += scanline[k];                
             }
         }
     }

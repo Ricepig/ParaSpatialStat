@@ -16,7 +16,7 @@
         <gdb_options>
           <DebugOptions>
             <option name="debug_command"
-                    value="Fisher  -o aaa.tiff -pc class.tif -pl l1.tif,l2.tif,l3.tif,l4.tif,l5.tif -pi i1.tif,i2.tif,i3.tif,i4.tif,i5.tif"/>
+                    value="Fisher  -o aaa.tiff -pc class_binary.tif -pl dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif -pi dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif "/>
             <option name="debug_dir"
                     value="/home/ricepig/ParaSpatialStat/Fisher/dist/Debug/GNU-Linux-x86"/>
           </DebugOptions>
@@ -28,16 +28,18 @@
       </nativedebugger>
       <runprofile version="9">
         <runcommandpicklist>
-          <runcommandpicklistitem>"${OUTPUT_PATH}"</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" /home/ricepig/class1.tif /home/ricepig/data1.tif 1 2 3</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" /home/ricepig/class.tif /home/ricepig/data.tif 1 2 3 4 5 6 7</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl learn_band1.tif,learn_band2.tif,learn_band3.tif,learn_band4.tif,learn_band5.tif -pi infer_band1.tif,infer_band2.tif,infer_band3.tif,infer_band4.tif,infer_band5.tif </runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl learn_band1.tif,learn_band2.tif,learn_band3.tif,learn_band4.tif,learn_band5.tif -pi infer_band1.tif,infer_band2.tif,infer_band3.tif,infer_band4.tif,infer_band5.tif</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl l2.tif,l3.tif,l4.tif,l5.tif -pi i2.tif,i3.tif,i4.tif,i5.tif</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl l1.tif, l2.tif,l3.tif,l4.tif,l5.tif -pi i1.tif,i2.tif,i3.tif,i4.tif,i5.tif</runcommandpicklistitem>
+          <runcommandpicklistitem>Fisher  -o aaa.tiff -pc class_binary.tif -pl dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif -pi dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif </runcommandpicklistitem>
+          <runcommandpicklistitem>Fisher  -o aaa.tiff -pc class_binary.tif -pl dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif -pi dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl l1.tif,l2.tif,l3.tif,l4.tif,l5.tif -pi i1.tif,i2.tif,i3.tif,i4.tif,i5.tif</runcommandpicklistitem>
+          <runcommandpicklistitem>"${OUTPUT_PATH}"  -o aaa.tiff -pc class_binary.tif -pl dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif -pi dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif </runcommandpicklistitem>
         </runcommandpicklist>
-        <runcommand>"${OUTPUT_PATH}" -o aaa.tiff -pc class.tif -pl l1.tif,l2.tif,l3.tif,l4.tif,l5.tif -pi i1.tif,i2.tif,i3.tif,i4.tif,i5.tif</runcommand>
+        <runcommand>"${OUTPUT_PATH}"  -o aaa.tiff -pc class_binary.tif -pl dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif -pi dem_s_5m.tif,plan_s_5m.tif,prof_s_5m.tif,slope_s_5m.tif,wet_s_5m.tif</runcommand>
         <rundir>/home/ricepig/ParaSpatialStat/Fisher/./dist/Debug/GNU-Linux-x86</rundir>
         <buildfirst>true</buildfirst>
         <terminal-type>0</terminal-type>
