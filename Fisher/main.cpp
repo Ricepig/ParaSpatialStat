@@ -165,7 +165,8 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 		}
 		else
 		{
-			nodatas[i] = bands[i]->GetNoDataValue();
+			double no = bands[i]->GetNoDataValue();
+			nodatas[i] = no;
 		}
     }
     if(myRank == 0){
@@ -184,7 +185,8 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	if(open_raster(outputFile, GA_Update, &destset, &destband) != 0)
 		return 1;
 	
-	double nodata = destband->GetNoDataValue();
+	double nodata = -255; 
+	destband->SetNoDataValue(nodata);
 	
 	int width = destband->GetXSize();
 	int height = destband->GetYSize();
@@ -193,17 +195,21 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	char* buffer2 = (char*)malloc(sizeof(char)*width);
 	
 	int count = 0;
-	for(int i=0;i<height+rankSize-1;i+=rankSize){
-		int row = i+myRank;
+	
+	int loop = (height+rankSize-1)/rankSize;
+	
+	for(int i=0;i<loop;i++){
+	
+		int row = loop*myRank + i;
 		
 		if(row < height){
 			count++;
+			
 			for(int j=0;j<bandCount;j++){
-				
 				bands[j]->RasterIO(GF_Read, 0, row, width, 1, buffer, width, 1, GDT_Float32, 0, 0);
 				t2 = MPI_Wtime();
 				for(int k=0;k<width;k++){
-					if(fabs(buffer[k]-nodatas[j])<EPS || fabs(results[k]-nodata)<EPS)
+					if(fabs(buffer[k]-nodatas[j])<EPS || (j>0 && fabs(results[k]-nodata)<EPS))
 					{
 						results[k] = nodata;
 					}
@@ -211,7 +217,6 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 					{
 						results[k] += ((float)coefficients[j])*buffer[k];
 					}
-					
 				}
 				t3 = MPI_Wtime();
 				calc_duration += t3-t2;
@@ -236,7 +241,7 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 		}
 	}
 	
-	printf("thread %d, comp time: %f, rows: %d\n", myRank, calc_duration,count );
+	//printf("thread %d, comp time: %f, rows: %d\n", myRank, calc_duration,count );
 	
 	double * temp = new double[2];
 	*temp = calc_duration;
@@ -244,7 +249,6 @@ int fisher_discriminating(char ** dataFiles, int bandCount, const char * outputF
 	free(buffer);
 	free(buffer2);
 	free(results);
-	
 	
     close_raster(destset);
 	for(int j=0;j<bandCount;j++)
@@ -467,9 +471,12 @@ int main(int argc, char **argv) {
 	struct Timespans benchmark1, benchmark2;
 	
 	double pivot = 0;
-	double* coefficients = new double[bandCount];
+	double* coefficients = new double[bandCount+1];
 	
     fisher_training(pClassFile, pLearnFiles, bandCount, myRank, rankSize, &coefficients, pivot, benchmark1);
+	coefficients[bandCount]=pivot;
+	MPI_Bcast(coefficients, bandCount+1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	pivot = coefficients[bandCount];
 	fisher_discriminating(pInferFiles, bandCount, pOutputFile, coefficients, pivot, myRank, rankSize, benchmark2);
 	if(myRank==0){
 		cout << "[OUTPUT] Phi: " << pivot << endl;
